@@ -1,0 +1,667 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.text;\nconst rawLines = raw.split('\\n');\n\n// Merge wrapped lines\nlet mergedLines = [];\nlet currentLine = '';\n\nfor (const line of rawLines) {\n  if (/^\\d{4}-\\d{2}-\\d{2}/.test(line.trim())) {\n    if (currentLine) mergedLines.push(currentLine.trim());\n    currentLine = line;\n  } else {\n    currentLine += ' ' + line.trim();\n  }\n}\nif (currentLine) mergedLines.push(currentLine.trim());\n\nconst now = new Date();\n\nconst results = [];\n\nfor (const line of mergedLines) {\n  const timeMatch = line.match(/^(\\d{4}-\\d{2}-\\d{2}) (\\d{2}):(\\d{2}):(\\d{2}) (AM|PM)/);\n  if (!timeMatch) continue;\n\n  const [ , date, hr, min, sec, meridian ] = timeMatch;\n  let hour = parseInt(hr, 10);\n  if (meridian === 'PM' && hour !== 12) hour += 12;\n  if (meridian === 'AM' && hour === 12) hour = 0;\n  const hourStr = hour.toString().padStart(2, '0');\n  const timestampISO = new Date(`${date}T${hourStr}:${min}:${sec}`).toISOString();\n  const timestamp = `${date} ${hr}:${min}:${sec} ${meridian}`;\n\n  const category = line.includes('DEVICE') ? 'DEVICE' : line.includes('NETWORK') ? 'NETWORK' : 'UNKNOWN';\n  const severityMatch = line.match(/\\b(INFO|WARNING|ERROR)\\b/);\n  const severity = severityMatch ? severityMatch[1] : 'UNKNOWN';\n\n  const matchStandard = line.match(/\\[(.*?):(.*?):(.*?)\\] (was connected|is down)\\./i);\n  const matchAlt = line.match(/\\[([^\\]]+)\\] of \\[(.*?):(.*?)\\] is down\\./i);\n\n  const formatDateTime = (date) => {\n    return date.toLocaleString('en-US', {\n      year: 'numeric',\n      month: 'long',\n      day: 'numeric',\n      hour: '2-digit',\n      minute: '2-digit',\n      hour12: true\n    });\n  };\n\n  let entry = null;\n\n  if (matchStandard) {\n    const [, type, name, mac, state] = matchStandard;\n    entry = {\n      timestamp,\n      timestampISO,\n      category,\n      severity,\n      type: type.trim(),\n      name: name.trim(),\n      mac: mac.trim(),\n      status: state.toLowerCase().includes('connected') ? 'connected' : 'disconnected'\n    };\n  } else if (matchAlt) {\n    const [, name, type, mac] = matchAlt;\n    entry = {\n      timestamp,\n      timestampISO,\n      category,\n      severity,\n      type: type.trim(),\n      name: name.trim(),\n      mac: mac.trim(),\n      status: 'disconnected'\n    };\n  }\n\n  if (entry) {\n    const checkAfter = new Date(new Date(timestampISO).getTime() + 30 * 60 * 1000);\n    entry.checkAfter = checkAfter.toISOString();\n    entry.timestampFormatted = formatDateTime(new Date(timestampISO));\n    entry.alertSent = false;\n    entry.rowId = `${entry.mac}-${entry.timestampISO}`;\n    results.push({ json: entry });\n  }\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "353c9d6f-1c47-4be6-aff6-a7c9c573bfeb",
+      "name": "Process Email and Extract"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID_HERE",
+          "mode": "list",
+          "cachedResultName": "YOUR_SHEET_NAME_HERE",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID_HERE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID_HERE",
+          "mode": "list",
+          "cachedResultName": "YOUR_SHEET_NAME_HERE",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID_HERE/edit#gid=YOUR_SHEET_GID_HERE"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $json.timestamp }}",
+            "timestampISO": "={{ $json.timestampISO }}",
+            "category": "={{ $json.category }}",
+            "severity": "={{ $json.severity }}",
+            "mac": "={{ $json.mac }}",
+            "name": "={{ $json.name }}",
+            "type": "={{ $json.type }}",
+            "checkAfter": "={{ $json.checkAfter }}",
+            "status": "={{ $json.status }}",
+            "alertSent": "={{ $json.alertSent }}",
+            "rowId": "={{ $json.rowId }}",
+            "timeStampFormated": "={{ $json.timestampFormatted }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "rowId",
+              "displayName": "rowId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestampISO",
+              "displayName": "timestampISO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "severity",
+              "displayName": "severity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "mac",
+              "displayName": "mac",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "checkAfter",
+              "displayName": "checkAfter",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "alertSent",
+              "displayName": "alertSent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "timeStampFormated",
+              "displayName": "timeStampFormated",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        448,
+        0
+      ],
+      "id": "fa53b806-4779-45eb-9ed0-c75e4c0183fb",
+      "name": "Append Row in Sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "9YLBXhozEprX4MN3",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        640
+      ],
+      "id": "940962b0-0b84-46fb-a8a5-86d06937f80c",
+      "name": "Check Every 5 minutes"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID_HERE",
+          "mode": "list",
+          "cachedResultName": "YOUR_SHEET_NAME_HERE",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID_HERE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID_HERE",
+          "mode": "list",
+          "cachedResultName": "YOUR_SHEET_NAME_HERE",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID_HERE/edit#gid=YOUR_SHEET_GID_HERE"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        224,
+        640
+      ],
+      "id": "1ec042c6-984f-41c8-96e7-b3449ed4bf47",
+      "name": "Get Row(s) in Sheet",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// ... (Code from \"Check Device and Notify\" node)\n\n// Group rows by MAC\nconst latestByMac = {};\n\nfor (const item of items) { // 'items' here represents all rows fetched from your Google Sheet\n  const mac = item.json.mac;\n  const time = new Date(item.json.timestampISO); // Converts the timestamp ISO string to a Date object\n\n  if (!mac || isNaN(time)) continue; // Skips if MAC is missing or time is invalid\n\n  // This is the crucial part for finding the LATEST status\n  if (!latestByMac[mac] || new Date(latestByMac[mac].json.timestampISO) < time) {\n    latestByMac[mac] = item; // If this MAC is new, or the current 'item' is newer than what's stored, update it\n  }\n}\n\n// Filter the latest per MAC that are still disconnected and have passed their 30-minute threshold\nconst overdueAlerts = Object.values(latestByMac).filter(item => {\n  const status = item.json.status; // Get the status of the LATEST entry for this MAC\n  const timestampISO = new Date(item.json.timestampISO); // Original event time of the latest entry\n  const checkAfter = new Date(item.json.checkAfter); // 30 mins after original event time of the latest entry\n  const alertSent = item.json.alertSent;\n\n  // This check assumes 'checkAfter' means 30 minutes from timestampISO has passed,\n  // and we want to trigger if that condition is met internally, irrespective of 'now'.\n  const isOverdueFinal = !isNaN(checkAfter.getTime());\n\n  const notAlerted = !(alertSent === true || alertSent === \"true\");\n\nreturn (status === 'disconnected' || status === 'isolated') && isOverdueFinal && notAlerted;\n});\n\nreturn overdueAlerts;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        640
+      ],
+      "id": "af2e478a-b129-4a5f-9893-d3991556083d",
+      "name": "Check Device and Notify"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID_HERE",
+          "mode": "list",
+          "cachedResultName": "YOUR_SHEET_NAME_HERE",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID_HERE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID_HERE",
+          "mode": "list",
+          "cachedResultName": "YOUR_SHEET_NAME_HERE",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID_HERE/edit#gid=YOUR_SHEET_GID_HERE"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "alertSent": "=true",
+            "rowId": "={{ $json.rowId }}"
+          },
+          "matchingColumns": [
+            "rowId"
+          ],
+          "schema": [
+            {
+              "id": "rowId",
+              "displayName": "rowId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "timestampISO",
+              "displayName": "timestampISO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "severity",
+              "displayName": "severity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "mac",
+              "displayName": "mac",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "checkAfter",
+              "displayName": "checkAfter",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "alertSent",
+              "displayName": "alertSent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timeStampFormated",
+              "displayName": "timeStampFormated",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        672,
+        448
+      ],
+      "id": "223392b6-d25f-4f81-bf3d-7e6771e298fb",
+      "name": "Update Alert"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "labelIds": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "9d76aaaf-45f5-4506-a307-3039918d84a9",
+      "name": "Receives Alert"
+    },
+    {
+      "parameters": {
+        "operation": "clear",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID_HERE",
+          "mode": "list",
+          "cachedResultName": "YOUR_SHEET_NAME_HERE",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID_HERE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID_HERE",
+          "mode": "list",
+          "cachedResultName": "YOUR_SHEET_NAME_HERE",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID_HERE/edit#gid=YOUR_SHEET_GID_HERE"
+        },
+        "clear": "specificRows",
+        "startIndex": 2,
+        "rowsToDelete": 500
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        224,
+        1056
+      ],
+      "id": "96e4a5aa-753a-40af-a26f-0ad49706ccb2",
+      "name": "Clear sheet"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "daysInterval": 2,
+              "triggerAtHour": 2
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        1056
+      ],
+      "id": "840cf011-fa15-48aa-a2cc-7b54cc0bbb4d",
+      "name": "Clear Rows Every 2 days"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "YOUR_WEBHOOK_PATH_HERE",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        224
+      ],
+      "id": "d4b367b7-2595-4676-b13b-5e5eb6fee4c8",
+      "name": "Webhook",
+      "webhookId": "YOUR_WEBHOOK_PATH_HERE"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID_HERE",
+          "mode": "list",
+          "cachedResultName": "YOUR_SHEET_NAME_HERE",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID_HERE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID_HERE",
+          "mode": "list",
+          "cachedResultName": "YOUR_SHEET_NAME_HERE",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID_HERE/edit#gid=YOUR_SHEET_GID_HERE"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "111": "={{ $json.headers }}"
+          },
+          "matchingColumns": [
+            "111"
+          ],
+          "schema": [
+            {
+              "id": "111",
+              "displayName": "111",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        224,
+        224
+      ],
+      "id": "1dd37c51-c6af-4b3e-9b8a-5d554ded5ed7",
+      "name": "Append Row in Sheet1"
+    },
+    {
+      "parameters": {
+        "userKey": "YOUR_PUSHOVER_USER_KEY_HERE",
+        "message": "={{ $json.name }} is {{ $json.status }}\n\n{{ $json.timeStampFormated }}",
+        "priority": 0,
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.pushover",
+      "typeVersion": 1,
+      "position": [
+        672,
+        640
+      ],
+      "id": "3e8ab6ff-3ed1-423f-94b6-b706ff3bf9f3",
+      "name": "Alert User",
+      "credentials": {
+        "pushoverApi": {
+          "id": "Wu4e8Ac1eQCrTdnE",
+          "name": "Pushover account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Process Email and Extract": {
+      "main": [
+        [
+          {
+            "node": "Append Row in Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Every 5 minutes": {
+      "main": [
+        [
+          {
+            "node": "Get Row(s) in Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Row(s) in Sheet": {
+      "main": [
+        [
+          {
+            "node": "Check Device and Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Device and Notify": {
+      "main": [
+        [
+          {
+            "node": "Update Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Alert User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receives Alert": {
+      "main": [
+        [
+          {
+            "node": "Process Email and Extract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear Rows Every 2 days": {
+      "main": [
+        [
+          {
+            "node": "Clear sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Append Row in Sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "0ac09109-bd12-4042-98e3-d79eda47d69d",
+  "meta": {
+    "instanceId": "d01584c137acc6debff205dab2295feffaded6fa97a8e6a16d6a41090f7caf2c"
+  },
+  "id": "B88ywVad7Wp2uRxT",
+  "tags": []
+}
